@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>連鎖演算 暗算トレーニング ゲーム</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-violet-950 min-h-screen text-white">
+  <div class="max-w-xl mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-1 text-violet-200">連鎖演算 暗算トレーニング</h1>
+    <p class="text-violet-400 mb-6 text-sm">複数の四則演算を連続で暗算！制限時間30秒</p>
+
+    <!-- Start screen -->
+    <div id="startScreen">
+      <div class="bg-violet-900 rounded-2xl p-6 mb-4">
+        <p class="text-sm text-violet-300 mb-3 font-semibold">難易度選択</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button onclick="setLevel('easy')" id="lvl-easy" aria-label="Easy" class="py-3 bg-violet-600 hover:bg-violet-700 rounded-xl font-bold text-sm transition">
+            Easy<br><span class="text-xs font-normal text-violet-300">2演算・小さい数字</span>
+          </button>
+          <button onclick="setLevel('medium')" id="lvl-medium" aria-label="Medium" class="py-3 bg-violet-900 border border-violet-600 hover:bg-violet-800 rounded-xl font-bold text-sm transition">
+            Medium<br><span class="text-xs font-normal text-violet-400">3演算</span>
+          </button>
+          <button onclick="setLevel('hard')" id="lvl-hard" aria-label="Hard" class="py-3 bg-violet-900 border border-violet-600 hover:bg-violet-800 rounded-xl font-bold text-sm transition">
+            Hard<br><span class="text-xs font-normal text-violet-400">4演算</span>
+          </button>
+          <button onclick="setLevel('expert')" id="lvl-expert" aria-label="Expert" class="py-3 bg-violet-900 border border-violet-600 hover:bg-violet-800 rounded-xl font-bold text-sm transition">
+            Expert<br><span class="text-xs font-normal text-violet-400">5演算・大きい数字</span>
+          </button>
+        </div>
+      </div>
+      <div class="bg-violet-900 rounded-2xl p-4 mb-4 text-sm">
+        <p class="text-violet-300">週次正答率</p>
+        <div id="weeklyChart" class="mt-2"></div>
+      </div>
+      <button onclick="startGame()" aria-label="ゲームスタート" class="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-4 rounded-2xl text-lg transition">スタート！</button>
+    </div>
+
+    <!-- Game screen -->
+    <div id="gameScreen" class="hidden">
+      <!-- Timer bar -->
+      <div class="flex items-center gap-3 mb-4">
+        <div class="flex-1 bg-violet-900 rounded-full h-4 overflow-hidden">
+          <div id="timerBar" class="h-full bg-violet-400 rounded-full transition-all duration-1000" style="width:100%"></div>
+        </div>
+        <span id="timerNum" class="text-violet-200 font-mono font-bold w-8 text-right">30</span>
+      </div>
+
+      <div class="flex gap-3 mb-4 text-center">
+        <div class="bg-violet-900 rounded-xl px-4 py-2 flex-1">
+          <p class="text-xs text-violet-400">スコア</p>
+          <p id="gameScore" class="text-xl font-bold text-violet-200">0</p>
+        </div>
+        <div class="bg-violet-900 rounded-xl px-4 py-2 flex-1">
+          <p class="text-xs text-violet-400">正解</p>
+          <p id="gameCorrect" class="text-xl font-bold text-emerald-400">0</p>
+        </div>
+        <div class="bg-violet-900 rounded-xl px-4 py-2 flex-1">
+          <p class="text-xs text-violet-400">不正解</p>
+          <p id="gameWrong" class="text-xl font-bold text-red-400">0</p>
+        </div>
+      </div>
+
+      <div class="bg-violet-900 rounded-2xl p-6 mb-4">
+        <p class="text-3xl font-bold text-center text-white mb-6" id="equationDisp"></p>
+        <input id="answerInput" type="number" placeholder="答えを入力..." autocomplete="off"
+          class="w-full bg-violet-800 text-white text-xl font-mono text-center rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-400 mb-3">
+        <button onclick="submitAnswer()" aria-label="答えを送信" class="w-full bg-violet-600 hover:bg-violet-700 font-bold py-3 rounded-xl transition text-lg">送信</button>
+        <p id="gameFeedback" class="text-center text-sm mt-2 h-5 font-semibold"></p>
+      </div>
+    </div>
+
+    <!-- Result screen -->
+    <div id="resultScreen" class="hidden bg-violet-900 rounded-2xl p-8 text-center">
+      <p class="text-4xl mb-3">🧮</p>
+      <h2 class="text-2xl font-bold mb-2">タイムアップ！</h2>
+      <p id="resultText" class="text-violet-300 mb-2"></p>
+      <p id="resultRate" class="text-violet-400 text-sm mb-6"></p>
+      <button onclick="showStart()" aria-label="スタート画面へ" class="bg-violet-600 hover:bg-violet-700 text-white font-bold px-8 py-3 rounded-xl transition">もう一度</button>
+    </div>
+  </div>
+
+  <script>
+    let level = 'easy';
+    let timer = 30, interval = null;
+    let score = 0, correct = 0, wrong = 0;
+    let currentAnswer = 0;
+
+    const levelConfig = {
+      easy:   { ops: 2, maxNum: 12, divRange: 6 },
+      medium: { ops: 3, maxNum: 20, divRange: 9 },
+      hard:   { ops: 4, maxNum: 25, divRange: 12 },
+      expert: { ops: 5, maxNum: 30, divRange: 15 },
+    };
+
+    function setLevel(l) {
+      level = l;
+      ['easy','medium','hard','expert'].forEach(id => {
+        const btn = document.getElementById('lvl-'+id);
+        btn.className = 'py-3 bg-violet-900 border border-violet-600 hover:bg-violet-800 rounded-xl font-bold text-sm transition';
+      });
+      document.getElementById('lvl-'+l).className = 'py-3 bg-violet-600 hover:bg-violet-700 rounded-xl font-bold text-sm transition';
+    }
+
+    function getRand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+    function generateEquation() {
+      const cfg = levelConfig[level];
+      const numOps = cfg.ops;
+      // Build chain where intermediate results are always integers
+      let nums = [getRand(2, cfg.maxNum)];
+      let ops = [];
+      for (let i = 0; i < numOps; i++) {
+        const op = ['+','-','*','/'][getRand(0, 3)];
+        ops.push(op);
+        let n;
+        if (op === '/') {
+          // pick divisor that divides current result
+          let cur = evalChain(nums, ops.slice(0,-1));
+          const divisors = [];
+          for (let d = 1; d <= cfg.divRange; d++) if (cur % d === 0 && cur / d !== 0) divisors.push(d);
+          n = divisors.length > 0 ? divisors[getRand(0, divisors.length-1)] : 1;
+        } else if (op === '*') {
+          n = getRand(2, Math.min(cfg.maxNum, 12));
+        } else {
+          n = getRand(1, cfg.maxNum);
+        }
+        nums.push(n);
+      }
+      return { nums, ops };
+    }
+
+    function evalChain(nums, ops) {
+      let result = nums[0];
+      for (let i = 0; i < ops.length; i++) {
+        const n = nums[i+1];
+        if (ops[i] === '+') result += n;
+        else if (ops[i] === '-') result -= n;
+        else if (ops[i] === '*') result *= n;
+        else if (ops[i] === '/') result = Math.floor(result / n);
+      }
+      return result;
+    }
+
+    function equationString(nums, ops) {
+      let s = String(nums[0]);
+      for (let i = 0; i < ops.length; i++) {
+        s += ' ' + ops[i] + ' ' + nums[i+1];
+      }
+      return s + ' = ?';
+    }
+
+    function showEquation() {
+      let eq;
+      let attempt = 0;
+      do {
+        eq = generateEquation();
+        attempt++;
+      } while (attempt < 20 && (Math.abs(evalChain(eq.nums, eq.ops)) > 9999));
+      currentAnswer = evalChain(eq.nums, eq.ops);
+      document.getElementById('equationDisp').textContent = equationString(eq.nums, eq.ops);
+      document.getElementById('answerInput').value = '';
+      document.getElementById('answerInput').focus();
+    }
+
+    function startGame() {
+      score = 0; correct = 0; wrong = 0; timer = 30;
+      document.getElementById('startScreen').classList.add('hidden');
+      document.getElementById('gameScreen').classList.remove('hidden');
+      document.getElementById('resultScreen').classList.add('hidden');
+      document.getElementById('gameScore').textContent = '0';
+      document.getElementById('gameCorrect').textContent = '0';
+      document.getElementById('gameWrong').textContent = '0';
+
+      showEquation();
+
+      interval = setInterval(() => {
+        timer--;
+        document.getElementById('timerNum').textContent = timer;
+        document.getElementById('timerBar').style.width = (timer / 30 * 100) + '%';
+        if (timer <= 10) document.getElementById('timerBar').className = 'h-full bg-red-500 rounded-full transition-all duration-1000';
+        if (timer <= 0) { clearInterval(interval); endGame(); }
+      }, 1000);
+
+      document.getElementById('answerInput').addEventListener('keydown', handleKey);
+    }
+
+    function handleKey(e) { if (e.key === 'Enter') submitAnswer(); }
+
+    function submitAnswer() {
+      const val = parseInt(document.getElementById('answerInput').value);
+      if (isNaN(val)) return;
+      const fb = document.getElementById('gameFeedback');
+      if (val === currentAnswer) {
+        correct++; score += 10;
+        fb.textContent = '✅ 正解！';
+        fb.className = 'text-center text-sm mt-2 h-5 font-semibold text-emerald-400';
+      } else {
+        wrong++;
+        fb.textContent = `❌ 不正解 → 正解は ${currentAnswer}`;
+        fb.className = 'text-center text-sm mt-2 h-5 font-semibold text-red-400';
+      }
+      document.getElementById('gameScore').textContent = score;
+      document.getElementById('gameCorrect').textContent = correct;
+      document.getElementById('gameWrong').textContent = wrong;
+      setTimeout(showEquation, 600);
+    }
+
+    function endGame() {
+      document.getElementById('answerInput').removeEventListener('keydown', handleKey);
+      document.getElementById('gameScreen').classList.add('hidden');
+      document.getElementById('resultScreen').classList.remove('hidden');
+      document.getElementById('resultText').textContent = `スコア: ${score}点 / 正解: ${correct}問 / 不正解: ${wrong}問`;
+      const total = correct + wrong;
+      const rate = total > 0 ? Math.round(correct / total * 100) : 0;
+      document.getElementById('resultRate').textContent = `正答率: ${rate}%`;
+
+      // Save to weekly log
+      saveWeeklyRecord(correct, total);
+    }
+
+    function saveWeeklyRecord(c, t) {
+      try {
+        const key = 'mm_weekly';
+        const data = JSON.parse(localStorage.getItem(key) || '{}');
+        const today = new Date().toISOString().slice(0,10);
+        if (!data[today]) data[today] = { correct:0, total:0 };
+        data[today].correct += c;
+        data[today].total += t;
+        localStorage.setItem(key, JSON.stringify(data));
+      } catch(e) {}
+    }
+
+    function renderWeeklyChart() {
+      try {
+        const data = JSON.parse(localStorage.getItem('mm_weekly') || '{}');
+        const days = Object.keys(data).sort().slice(-7);
+        const container = document.getElementById('weeklyChart');
+        if (days.length === 0) { container.innerHTML = '<p class="text-xs text-violet-500">データなし</p>'; return; }
+        container.innerHTML = '<div class="flex gap-1 items-end h-16">' + days.map(d => {
+          const r = data[d];
+          const pct = r.total > 0 ? Math.round(r.correct / r.total * 100) : 0;
+          const h = Math.max(4, Math.round(pct * 0.6));
+          return `<div class="flex flex-col items-center flex-1">
+            <div style="height:${h}px" class="w-full bg-violet-500 rounded-sm"></div>
+            <span class="text-xs text-violet-500 mt-1">${pct}%</span>
+          </div>`;
+        }).join('') + '</div><p class="text-xs text-violet-500 mt-1">過去7日の正答率</p>';
+      } catch(e) {}
+    }
+
+    function showStart() {
+      document.getElementById('resultScreen').classList.add('hidden');
+      document.getElementById('startScreen').classList.remove('hidden');
+      renderWeeklyChart();
+    }
+
+    setLevel('easy');
+    renderWeeklyChart();
+  </script>
+</body>
+</html>
